@@ -86,7 +86,7 @@ export const api = {
     return task
   },
 
-  updateTask: async (id: number, data: { title?: string; description?: string; status?: string }): Promise<Task> => {
+  updateTask: async (id: number, data: { title?: string; description?: string; status?: Task["status"] }): Promise<Task> => {
     const tasks = getTasks()
     const updated = tasks.map((t) => (t.id === id ? { ...t, ...data } : t))
     saveTasks(updated)
