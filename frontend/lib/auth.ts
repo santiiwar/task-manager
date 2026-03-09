@@ -1,14 +1,14 @@
 export function getToken() {
   if (typeof window === "undefined") return null
-  return localStorage.getItem("token")
+  return localStorage.getItem("currentUserId")
 }
 
 export function setToken(token: string) {
-  localStorage.setItem("token", token)
+  localStorage.setItem("currentUserId", token)
 }
 
 export function clearToken() {
-  localStorage.removeItem("token")
+  localStorage.removeItem("currentUserId")
 }
 
 export function isLoggedIn() {

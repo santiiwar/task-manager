@@ -1,39 +1,99 @@
-import { getToken } from "./auth"
+type Task = {
+  id: number
+  title: string
+  description: string
+  status: "TODO" | "IN_PROGRESS" | "DONE"
+  createdAt: string
+}
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"
+type User = {
+  id: number
+  username: string
+  email: string
+  passwordHash: string
+}
 
-async function request(path: string, options: RequestInit = {}) {
-  const token = getToken()
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error(data.error || "Error en la solicitud")
-  }
-  return res.json()
+function getUsers(): User[] {
+  if (typeof window === "undefined") return []
+  return JSON.parse(localStorage.getItem("users") || "[]")
+}
+
+function saveUsers(users: User[]) {
+  localStorage.setItem("users", JSON.stringify(users))
+}
+
+function getCurrentUserId(): number | null {
+  if (typeof window === "undefined") return null
+  const raw = localStorage.getItem("currentUserId")
+  return raw ? parseInt(raw) : null
+}
+
+function getTasks(): Task[] {
+  if (typeof window === "undefined") return []
+  return JSON.parse(localStorage.getItem("tasks") || "[]")
+}
+
+function saveTasks(tasks: Task[]) {
+  localStorage.setItem("tasks", JSON.stringify(tasks))
 }
 
 export const api = {
-  register: (username: string, email: string, password: string) =>
-    request("/api/auth/register", { method: "POST", body: JSON.stringify({ username, email, password }) }),
+  register: async (username: string, email: string, password: string) => {
+    const users = getUsers()
+    if (users.find((u) => u.email === email)) {
+      throw new Error("El email ya está registrado")
+    }
+    if (users.find((u) => u.username === username)) {
+      throw new Error("El usuario ya existe")
+    }
+    const user: User = {
+      id: Date.now(),
+      username,
+      email,
+      passwordHash: btoa(password),
+    }
+    saveUsers([...users, user])
+    localStorage.setItem("currentUserId", String(user.id))
+    return { token: String(user.id) }
+  },
 
-  login: (email: string, password: string) =>
-    request("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  login: async (email: string, password: string) => {
+    const users = getUsers()
+    const user = users.find((u) => u.email === email && u.passwordHash === btoa(password))
+    if (!user) {
+      throw new Error("Email o contraseña incorrectos")
+    }
+    localStorage.setItem("currentUserId", String(user.id))
+    return { token: String(user.id) }
+  },
 
-  getTasks: () => request("/api/tasks"),
+  getTasks: async (): Promise<Task[]> => {
+    const userId = getCurrentUserId()
+    return getTasks().filter((t) => (t as Task & { userId: number }).userId === userId)
+  },
 
-  createTask: (title: string, description: string) =>
-    request("/api/tasks", { method: "POST", body: JSON.stringify({ title, description }) }),
+  createTask: async (title: string, description: string): Promise<Task> => {
+    const userId = getCurrentUserId()
+    const task = {
+      id: Date.now(),
+      title,
+      description,
+      status: "TODO" as const,
+      createdAt: new Date().toISOString(),
+      userId,
+    }
+    saveTasks([...getTasks(), task])
+    return task
+  },
 
-  updateTask: (id: number, data: { title?: string; description?: string; status?: string }) =>
-    request(`/api/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  updateTask: async (id: number, data: { title?: string; description?: string; status?: string }): Promise<Task> => {
+    const tasks = getTasks()
+    const updated = tasks.map((t) => (t.id === id ? { ...t, ...data } : t))
+    saveTasks(updated)
+    return updated.find((t) => t.id === id) as Task
+  },
 
-  deleteTask: (id: number) =>
-    request(`/api/tasks/${id}`, { method: "DELETE" }),
+  deleteTask: async (id: number) => {
+    saveTasks(getTasks().filter((t) => t.id !== id))
+  },
 }
